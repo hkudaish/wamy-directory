@@ -42,7 +42,7 @@ const readData = () => {
     if (!fs.existsSync(dataFile)) {
       initializeDataFile();
     }
-    const data = fs.readFileSync(dataFile, 'utf-8');
+    const data = fs.readFileSync(dataFile, 'utf8');
     return JSON.parse(data);
   } catch (error) {
     console.error('Error reading data file:', error);
@@ -53,7 +53,7 @@ const readData = () => {
 // Write data to file
 const writeData = (data) => {
   try {
-    fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
+    fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf8');
     return true;
   } catch (error) {
     console.error('Error writing data file:', error);
