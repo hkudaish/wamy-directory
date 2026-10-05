@@ -262,7 +262,7 @@ seedOfficeEmployees('مكتب نيجيريا','نيجيريا',[['60149','هشا
 const DEFAULT_CATEGORIES=['الإدارة العليا','مساعدو الأمين العام','المستشارون','مديرو الإدارات','نواب الإدارات','مديرو مكاتب','مديرو مكاتب الندوة','رؤساء الأقسام','رؤساء اللجان','حراس الأمن','الموظفون'];
 const OFFICE_SOURCE_UPDATED_AT='2026-08-28T23:55:00+03:00',HQ_SOURCE_UPDATED_AT='2026-08-31T00:00:00+03:00',DIRECTORY_DATA_VERSION=8,DEFAULT_DIRECTORY_UPDATED_AT=HQ_SOURCE_UPDATED_AT;
 const BACKUP_FORMAT='wamy-directory-backup',BACKUP_VERSION=1;
-const API_BASE_URL=(location.hostname==='localhost'||location.hostname==='127.0.0.1')?'http://localhost:3001':'';
+const API_BASE_URL=(window.WAMY_APP_CONFIG && window.WAMY_APP_CONFIG.apiBaseUrl) || ((location.hostname==='localhost'||location.hostname==='127.0.0.1') ? 'http://localhost:3002' : '');
 const storedEmployeeData=JSON.parse(localStorage.getItem('wamyEmployees')||'null');
 let employees=storedEmployeeData||JSON.parse(JSON.stringify(defaultEmployees));
 let favorites=JSON.parse(localStorage.getItem('wamyFavorites')||'[]');
