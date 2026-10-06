@@ -1,5 +1,7 @@
 # WAMY Directory Storage System
 
+> Production persistence uses Netlify Blobs on Netlify or managed PostgreSQL on Render. See [NETLIFY_STORAGE.md](NETLIFY_STORAGE.md) or [PERSISTENT_STORAGE.md](PERSISTENT_STORAGE.md). JSON-file mode is local-development-only.
+
 This directory now includes a persistent storage system that saves data outside of the browser to a file-based storage backend.
 
 ## Architecture

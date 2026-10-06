@@ -1,5 +1,7 @@
 # Quick Start Guide - Storage System
 
+> This guide covers local development only. Production uses Netlify Blobs on Netlify or managed PostgreSQL on Render; see [NETLIFY_STORAGE.md](NETLIFY_STORAGE.md) or [PERSISTENT_STORAGE.md](PERSISTENT_STORAGE.md).
+
 ## 1. Install Dependencies
 
 Open PowerShell/Terminal in the `d:\wamy-directory` folder and run:
@@ -8,7 +10,7 @@ Open PowerShell/Terminal in the `d:\wamy-directory` folder and run:
 npm install
 ```
 
-This installs Express and CORS packages needed for the server.
+This installs the Express, CORS, and PostgreSQL packages needed for the server.
 
 ## 2. Start the Server
 

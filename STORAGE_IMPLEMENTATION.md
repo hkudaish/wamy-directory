@@ -1,5 +1,7 @@
 # ✅ Storage System Successfully Added!
 
+> This document describes the original JSON-file implementation. JSON files are development-only now; production uses the separate managed PostgreSQL database described in [PERSISTENT_STORAGE.md](PERSISTENT_STORAGE.md).
+
 ## Overview
 
 Your WAMY Directory application now has a **persistent storage system** that saves data to files outside the browser. This replaces the browser-only localStorage approach with a server-based solution.

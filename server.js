@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,11 @@ app.use(express.static(__dirname));
 // Data directory
 const dataDir = path.join(__dirname, 'data');
 const dataFile = path.join(dataDir, 'directory-data.json');
+const pool = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL }) : null;
+
+if (process.env.NODE_ENV === 'production' && !pool) {
+  throw new Error('DATABASE_URL is required in production; refusing to use ephemeral file storage.');
+}
 
 // Ensure data directory exists
 if (!fs.existsSync(dataDir)) {
@@ -30,42 +36,82 @@ const initializeDataFile = () => {
       categories: [],
       users: [],
       directoryLastUpdated: new Date().toISOString(),
-      directoryDataVersion: 7
+      directoryDataVersion: 8
     };
-    fs.writeFileSync(dataFile, JSON.stringify(defaultData, null, 2));
+    fs.writeFileSync(dataFile, JSON.stringify(defaultData, null, 2), 'utf8');
   }
 };
 
-// Read data from file
-const readData = () => {
+// Read data from PostgreSQL in production and the JSON file during local development.
+const readData = async () => {
   try {
+    if (pool) {
+      const result = await pool.query('SELECT payload FROM directory_state WHERE id = 1');
+      return result.rows[0]?.payload || null;
+    }
     if (!fs.existsSync(dataFile)) {
       initializeDataFile();
     }
     const data = fs.readFileSync(dataFile, 'utf8');
     return JSON.parse(data);
   } catch (error) {
-    console.error('Error reading data file:', error);
+    console.error('Error reading storage:', error);
     return null;
   }
 };
 
-// Write data to file
-const writeData = (data) => {
+// Persist data to PostgreSQL in production and JSON locally.
+const writeData = async (data) => {
   try {
+    if (pool) {
+      await pool.query(
+        `INSERT INTO directory_state (id, payload, updated_at)
+         VALUES (1, $1::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
+        [JSON.stringify(data)]
+      );
+      return true;
+    }
     fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf8');
     return true;
   } catch (error) {
-    console.error('Error writing data file:', error);
+    console.error('Error writing storage:', error);
     return false;
   }
+};
+
+const initializeStorage = async () => {
+  if (!pool) {
+    initializeDataFile();
+    return;
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS directory_state (
+      id SMALLINT PRIMARY KEY CHECK (id = 1),
+      payload JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  const existing = await pool.query('SELECT 1 FROM directory_state WHERE id = 1');
+  if (existing.rowCount === 0) {
+    const initialData = readDataFromFile();
+    await writeData(initialData);
+    console.log('Initialized PostgreSQL from data/directory-data.json');
+  }
+};
+
+const readDataFromFile = () => {
+  initializeDataFile();
+  return JSON.parse(fs.readFileSync(dataFile, 'utf8'));
 };
 
 // API Routes
 
 // GET all data
-app.get('/api/data', (req, res) => {
-  const data = readData();
+app.get('/api/data', async (req, res) => {
+  const data = await readData();
   if (data) {
     res.json({ success: true, data });
   } else {
@@ -74,7 +120,7 @@ app.get('/api/data', (req, res) => {
 });
 
 // POST save all data
-app.post('/api/data', (req, res) => {
+app.post('/api/data', async (req, res) => {
   const { employees, favorites, logs, categories, users, directoryLastUpdated, directoryDataVersion } = req.body;
   
   if (!Array.isArray(employees) || !Array.isArray(favorites)) {
@@ -91,7 +137,7 @@ app.post('/api/data', (req, res) => {
     directoryDataVersion: directoryDataVersion || 7
   };
 
-  if (writeData(data)) {
+  if (await writeData(data)) {
     res.json({ success: true, message: 'Data saved successfully' });
   } else {
     res.status(500).json({ success: false, error: 'Failed to save data' });
@@ -99,14 +145,14 @@ app.post('/api/data', (req, res) => {
 });
 
 // POST save employees only
-app.post('/api/employees', (req, res) => {
-  const data = readData();
+app.post('/api/employees', async (req, res) => {
+  const data = await readData();
   if (!data) {
     return res.status(500).json({ success: false, error: 'Failed to read data' });
   }
 
   data.employees = req.body;
-  if (writeData(data)) {
+  if (await writeData(data)) {
     res.json({ success: true, message: 'Employees saved successfully' });
   } else {
     res.status(500).json({ success: false, error: 'Failed to save employees' });
@@ -114,14 +160,14 @@ app.post('/api/employees', (req, res) => {
 });
 
 // POST save favorites only
-app.post('/api/favorites', (req, res) => {
-  const data = readData();
+app.post('/api/favorites', async (req, res) => {
+  const data = await readData();
   if (!data) {
     return res.status(500).json({ success: false, error: 'Failed to read data' });
   }
 
   data.favorites = req.body;
-  if (writeData(data)) {
+  if (await writeData(data)) {
     res.json({ success: true, message: 'Favorites saved successfully' });
   } else {
     res.status(500).json({ success: false, error: 'Failed to save favorites' });
@@ -129,14 +175,14 @@ app.post('/api/favorites', (req, res) => {
 });
 
 // POST save logs only
-app.post('/api/logs', (req, res) => {
-  const data = readData();
+app.post('/api/logs', async (req, res) => {
+  const data = await readData();
   if (!data) {
     return res.status(500).json({ success: false, error: 'Failed to read data' });
   }
 
   data.logs = req.body;
-  if (writeData(data)) {
+  if (await writeData(data)) {
     res.json({ success: true, message: 'Logs saved successfully' });
   } else {
     res.status(500).json({ success: false, error: 'Failed to save logs' });
@@ -144,14 +190,14 @@ app.post('/api/logs', (req, res) => {
 });
 
 // POST save categories only
-app.post('/api/categories', (req, res) => {
-  const data = readData();
+app.post('/api/categories', async (req, res) => {
+  const data = await readData();
   if (!data) {
     return res.status(500).json({ success: false, error: 'Failed to read data' });
   }
 
   data.categories = req.body;
-  if (writeData(data)) {
+  if (await writeData(data)) {
     res.json({ success: true, message: 'Categories saved successfully' });
   } else {
     res.status(500).json({ success: false, error: 'Failed to save categories' });
@@ -159,14 +205,14 @@ app.post('/api/categories', (req, res) => {
 });
 
 // POST save users only
-app.post('/api/users', (req, res) => {
-  const data = readData();
+app.post('/api/users', async (req, res) => {
+  const data = await readData();
   if (!data) {
     return res.status(500).json({ success: false, error: 'Failed to read data' });
   }
 
   data.users = req.body;
-  if (writeData(data)) {
+  if (await writeData(data)) {
     res.json({ success: true, message: 'Users saved successfully' });
   } else {
     res.status(500).json({ success: false, error: 'Failed to save users' });
@@ -174,14 +220,14 @@ app.post('/api/users', (req, res) => {
 });
 
 // POST update directory last updated timestamp
-app.post('/api/directory-updated', (req, res) => {
-  const data = readData();
+app.post('/api/directory-updated', async (req, res) => {
+  const data = await readData();
   if (!data) {
     return res.status(500).json({ success: false, error: 'Failed to read data' });
   }
 
   data.directoryLastUpdated = new Date().toISOString();
-  if (writeData(data)) {
+  if (await writeData(data)) {
     res.json({ success: true, timestamp: data.directoryLastUpdated });
   } else {
     res.status(500).json({ success: false, error: 'Failed to update timestamp' });
@@ -189,8 +235,8 @@ app.post('/api/directory-updated', (req, res) => {
 });
 
 // POST backup/restore
-app.post('/api/backup', (req, res) => {
-  const data = readData();
+app.post('/api/backup', async (req, res) => {
+  const data = await readData();
   if (data) {
     res.json({
       success: true,
@@ -217,7 +263,7 @@ app.post('/api/backup', (req, res) => {
 });
 
 // POST restore from backup
-app.post('/api/restore', (req, res) => {
+app.post('/api/restore', async (req, res) => {
   const backup = req.body;
   
   if (!backup || !backup.data || !backup.settings) {
@@ -234,7 +280,7 @@ app.post('/api/restore', (req, res) => {
     directoryDataVersion: backup.settings.directoryDataVersion || 7
   };
 
-  if (writeData(data)) {
+  if (await writeData(data)) {
     res.json({ success: true, message: 'Data restored successfully' });
   } else {
     res.status(500).json({ success: false, error: 'Failed to restore data' });
@@ -242,14 +288,25 @@ app.post('/api/restore', (req, res) => {
 });
 
 // Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
+app.get('/api/health', async (req, res) => {
+  if (pool) {
+    try {
+      await pool.query('SELECT 1');
+      return res.json({ status: 'ok', storage: 'postgresql', persistent: true });
+    } catch (error) {
+      console.error('PostgreSQL health check failed:', error);
+      return res.status(503).json({ status: 'error', storage: 'postgresql', persistent: true });
+    }
+  }
+  res.json({ status: 'ok', storage: 'local-json', persistent: false });
 });
 
-// Start server
-initializeDataFile();
-app.listen(PORT, () => {
-  console.log(`WAMY Directory Storage Server running on http://localhost:${PORT}`);
-  console.log(`Data directory: ${dataDir}`);
-  console.log(`Data file: ${dataFile}`);
+initializeStorage().then(() => {
+  app.listen(PORT, () => {
+    console.log(`WAMY Directory Storage Server running on http://localhost:${PORT}`);
+    console.log(`Storage: ${pool ? 'PostgreSQL' : dataFile}`);
+  });
+}).catch(error => {
+  console.error('Failed to initialize persistent storage:', error);
+  process.exit(1);
 });

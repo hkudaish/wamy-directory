@@ -1,5 +1,7 @@
 # Storage System Implementation - Summary
 
+> Production storage is now managed PostgreSQL. This older guide describes the original local JSON-file implementation and is not the production durability guide. See [PERSISTENT_STORAGE.md](PERSISTENT_STORAGE.md) for Render database setup, migration, and backups. JSON-file storage is development-only.
+
 ## ✅ Implementation Complete!
 
 A complete persistent storage system has been added to your WAMY Directory application. Data is now saved outside the browser to a server-based file system.
