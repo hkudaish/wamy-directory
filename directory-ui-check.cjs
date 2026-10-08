@@ -1,13 +1,14 @@
 ﻿const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
+const crypto=require('node:crypto');
 const source=fs.readFileSync('index.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1].replace(/init\(\);\s*$/,'');
 const stored=new Map();
 function createContext(){
  const elements=new Map(),events={};
  const get=id=>{if(!elements.has(id))elements.set(id,{value:'',innerHTML:'',textContent:'',style:{},classList:{contains:()=>false,add(){},remove(){},toggle(){}},setAttribute(){},addEventListener(){}});return elements.get(id)};
  const storage={getItem:key=>stored.get(key)??null,setItem:(key,value)=>stored.set(key,value),removeItem:key=>stored.delete(key)};
- const context=vm.createContext({console,localStorage:storage,sessionStorage:{...storage,getItem:()=>null},document:{getElementById:get,querySelectorAll:()=>[],addEventListener(){}},window:{addEventListener:(name,fn)=>events[name]=fn},location:{origin:'http://localhost',hostname:'localhost'},setTimeout,alert:msg=>{throw Error(msg)},fetch:()=>{throw Error('Unexpected network write')}});
+ const context=vm.createContext({console,crypto,localStorage:storage,sessionStorage:{...storage,getItem:()=>null},document:{getElementById:get,querySelectorAll:()=>[],addEventListener(){}},window:{addEventListener:(name,fn)=>events[name]=fn},location:{origin:'http://localhost',hostname:'localhost'},setTimeout,alert:msg=>{throw Error(msg)},fetch:()=>{throw Error('Unexpected network write')}});
  vm.runInContext(source,context);return {run:code=>vm.runInContext(code,context),get,context,events};
 }
 (async()=>{
@@ -51,5 +52,23 @@ function createContext(){
  app.run('useCustomPrintSelection()');assert.equal(app.get('templatePreset').value,'custom');
  app.run('renderStructure()');assert.match(app.get('structureContent').innerHTML,/<details data-tone="office" open><summary>المكاتب الدولية/);
  assert.equal(app.run("buildDirectoryBlocks(employees).filter(block=>block.html.includes('directory-heading department\">المكاتب الدولية')).length"),1);
- console.log(`PASS: search, favorites, totals, colors, print templates and independent office grouping (${hqCount} HQ / ${officeCount} international)`);
+ const html=fs.readFileSync('index.html','utf8'),settings=html.match(/<section id="settings"[\s\S]*?<\/section>/)[0];
+ for(const id of ['officesToggle','mobileToggle','emailToggle','csvInput','backupInput']){assert.ok(settings.includes(`id="${id}"`));assert.equal(html.split(`id="${id}"`).length,2)}
+ assert.ok(!html.match(/<div class="nav"[\s\S]*?<\/div>/)[0].includes('data-panel="admin"'));
+ app.context.contactSample={id:900,name:'موظف اختبار',title:'موظف',category:'الموظفون',department:'إدارة اختبار',mobile:'0500000000',email:'contact@example.test',ext:'123'};
+ app.run("setContactVisibility('mobile',false)");assert.doesNotMatch(app.run('personCard(contactSample)'),/0500000000/);assert.match(app.run('personCard(contactSample)'),/contact@example.test/);
+ app.run("setContactVisibility('email',false)");assert.equal(app.run('contactDetailsHTML(contactSample)'),'');assert.equal(app.run('printContactDetailsHTML(contactSample)'),'');
+ assert.doesNotMatch(app.run("tableHTML([contactSample],false,['name','mobile','email','ext'])"),/0500000000|contact@example.test|<th>الجوال/);
+ const reloaded=createContext();assert.equal(reloaded.run('showMobile'),false);assert.equal(reloaded.run('showEmail'),false);
+ app.run("currentSession={id:1,name:'مسؤول أول',username:'admin',role:'sysadmin'};log('تحديث أول');currentSession={id:2,name:'مسؤول ثان',username:'second',role:'sysadmin'};log('تحديث ثان');logs.push({date:'2026-10-08',msg:'تحديث قديم'});renderLogs()");
+ assert.equal(app.run('logs[0].username'),'second');assert.equal(app.run('logs[1].userId'),1);assert.match(app.get('logUserFilter').innerHTML,/second|admin/);
+ app.get('logUserFilter').value='admin';app.run('renderLogs()');assert.match(app.get('logsTable').innerHTML,/تحديث أول/);assert.doesNotMatch(app.get('logsTable').innerHTML,/تحديث ثان/);
+ app.get('logUserFilter').value='unknown';app.run('renderLogs()');assert.match(app.get('logsTable').innerHTML,/تحديث قديم/);assert.doesNotMatch(app.get('logsTable').innerHTML,/تحديث أول/);
+ assert.equal(app.run('validateBackupPayload(buildBackupPayload()).display.showMobile'),false);
+ app.context.document.head={appendChild(){}};app.context.document.createElement=()=>({});app.get('dynamicPageStyle').remove=()=>{};app.context.setTimeout=()=>{};
+ app.get('templatePreset').value='custom';app.get('paper').value='A4';app.get('orientation').value='portrait';app.run('employees=[contactSample];generatePrint()');assert.doesNotMatch(app.get('printArea').innerHTML,/0500000000|contact@example.test|<th>الجوال/);
+ app.get('paper').value='A3';app.run('generatePrint()');assert.doesNotMatch(app.get('printArea').innerHTML,/0500000000|contact@example.test/);
+ app.run("setContactVisibility('mobile',true);setContactVisibility('email',true)");assert.match(app.run('officePersonCard(contactSample)'),/0500000000/);
+ app.run("currentSession={id:2,name:'مشرف',username:'second',role:'supervisor'};renderLogs()");assert.equal(app.get('logsTable').innerHTML,'');assert.throws(()=>app.run("showPanel('users')"));app.run("showPanel('settings')");
+ console.log(`PASS: settings, contact visibility/reload/print, user log filtering, backups, permissions, and previous directory checks (${hqCount} HQ / ${officeCount} international)`);
 })().catch(error=>{console.error(error);process.exitCode=1});

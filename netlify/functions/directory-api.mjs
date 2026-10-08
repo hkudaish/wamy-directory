@@ -133,6 +133,12 @@ export default async function handler(request) {
       return jsonResponse({ success: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
     }
 
+    if (pathname === '/api/backup' && request.method === 'GET') {
+      const user = await currentUser(request, state);
+      if (user?.role !== 'sysadmin') return jsonResponse({ error: 'تصدير النسخة الاحتياطية متاح لمدير النظام فقط.' }, 403);
+      return jsonResponse({ success: true, data: state });
+    }
+
     if (pathname !== '/api/data') return jsonResponse({ error: 'Not found' }, 404);
     if (request.method === 'GET') return jsonResponse({ success: true, data: publicState(state) });
     if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405, { Allow: 'GET, POST' });
