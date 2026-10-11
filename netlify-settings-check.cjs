@@ -15,5 +15,23 @@ const request=(path,token)=>new Request('https://directory.example.test'+path,{h
  assert.equal((await handler(request('/api/backup','supervisor-session'))).status,403);
  const exported=await handler(request('/api/backup','admin-session'));assert.equal(exported.status,200);assert.equal(exported.headers.get('cache-control'),'no-store');const backup=await exported.json();assert.equal(backup.data.users[0].password,'synthetic-test-password');assert.equal(backup.data.logs[0].username,'admin');
  const publicData=await (await handler(request('/api/data'))).json();assert.equal(Object.hasOwn(publicData.data.users[0],'password'),false);
+ const originalUsers=structuredClone(state.users);
+ const supervisorSave=new Request('https://directory.example.test/api/data',{method:'POST',headers:{cookie:'wamy_session=supervisor-session','Content-Type':'application/json'},body:JSON.stringify({...state,employees:[{id:1,name:'Updated employee',mobile:'0500000000',email:'employee@example.test'}],users:[{id:2,username:'supervisor',role:'sysadmin',password:'changed'}]})});
+ assert.equal((await handler(supervisorSave)).status,200);
+ const saved=stores.get('wamy-directory-data').get('directory-state');
+ assert.equal(saved.employees[0].email,'employee@example.test');
+ assert.deepEqual(JSON.parse(JSON.stringify(saved.users)),originalUsers);
+ assert.equal((await handler(new Request('https://directory.example.test/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)}))).status,401);
+ const html=fs.readFileSync('index.html','utf8');
+ const alerts=[];const elements=new Map();
+ const employee={id:1,name:'Original employee',title:'Employee',category:'Staff',department:'Department',section:'',committee:'',office:'',country:'',ext:'123',employeeNo:'',mobile:'',email:'',order:1};
+ const ui=vm.createContext({currentSession:{role:'supervisor'},employees:[employee],categories:['Staff'],currentEdit:null,alert:message=>alerts.push(message),escapeHTML:value=>String(value),document:{getElementById:id=>{if(!elements.has(id))elements.set(id,{value:'',textContent:'',innerHTML:'',classList:{add(){},remove(){}}});return elements.get(id);}},markDirectoryUpdated(){},log(){},save:async()=>true,fillDepartments(){},renderAll(){},renderAdmin(){}});
+ for(const name of ['isSysAdmin','isDataAdmin','isPrivileged','openEmployeeModal','closeModal','saveEmployee']){const line=html.split(/\r?\n/).find(line=>line.startsWith(`function ${name}(`)||line.startsWith(`async function ${name}(`));assert(line,`${name} exists`);vm.runInContext(line,ui);}
+ vm.runInContext('openEmployeeModal(1)',ui);assert.equal(ui.currentEdit,1);assert.equal(alerts.length,0);
+ for(const [key,value] of Object.entries(employee))if(key!=='id')ui.document.getElementById('f_'+key).value=String(value);
+ ui.document.getElementById('f_mobile').value='0501234567';
+ await vm.runInContext('saveEmployee()',ui);assert.equal(ui.employees[0].mobile,'0501234567');assert.equal(alerts.length,0);assert.equal(vm.runInContext('isSysAdmin()',ui),false);
+ ui.currentSession=null;vm.runInContext('openEmployeeModal(1)',ui);assert.equal(alerts.length,1);
  console.log('PASS: full backup restricted to system administrator; public data excludes account passwords');
+ console.log('PASS: supervisor edits employees in UI and API; user accounts remain protected; anonymous edits blocked');
 })().catch(error=>{console.error(error);process.exitCode=1});
