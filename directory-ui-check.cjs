@@ -14,12 +14,17 @@ function createContext(){
 (async()=>{
  let app=createContext();
  const count=app.run('employees.length');
- app.run('renderHome()');const stats=app.get('stats').innerHTML;
+ app.run('renderHome()');const totalCard=()=>app.get('stats').innerHTML.match(/<button[^>]*class="stat stat-total[\s\S]*?<\/button>/)[0];const stats=totalCard();
+ const favoriteCard=()=>app.get('stats').innerHTML.match(/<button[^>]*class="stat stat-favorite[\s\S]*?<\/button>/)[0];
+ assert.match(totalCard(),/<span>الموظفون<\/span>/);assert.match(favoriteCard(),/<b>0<\/b>/);
+ assert.doesNotMatch(fs.readFileSync('index.html','utf8'),/id="chips"|\.stats\{display:none\}/);
+ const selectedCategory=app.run('visibleCategories()[0]');app.run('setCategoryByIndex(1)');assert.equal(app.run('activeCategory'),selectedCategory);assert.equal(app.run('filtered().every(person=>person.category===activeCategory)'),true);assert.ok(app.run('filtered().length')>0);
+ assert.match(app.get('stats').innerHTML,/class="stat stat-category active"[^>]*aria-pressed="true"/);app.run('setCategoryByIndex(0)');assert.equal(app.run('filtered().length'),count);
  app.get('search').value='no-match-previous-query';assert.equal(app.run('filtered().length'),0);
  app.run("setCategory('الكل')");assert.equal(app.get('search').value,'');assert.equal(app.run('filtered().length'),count);
  app.get('search').value='old';app.get('adminSearch').value='old-admin';app.run("showPanel('favorites')");assert.equal(app.get('search').value,'');assert.equal(app.get('adminSearch').value,'');
- app.run('toggleFav(employees[0].id)');assert.equal(app.run('favorites.length'),1);assert.equal(app.run('employees.length'),count);assert.equal(app.get('stats').innerHTML,stats);assert.match(app.get('favResults').innerHTML,/aria-pressed="true"/);
- app.run("setCategory('المفضلة ★')");assert.equal(app.run('filtered().length'),1);
+ app.run('toggleFav(employees[0].id)');assert.equal(app.run('favorites.length'),1);assert.equal(app.run('employees.length'),count);assert.equal(totalCard(),stats);assert.match(favoriteCard(),/<b>1<\/b>/);assert.match(app.get('favResults').innerHTML,/aria-pressed="true"/);
+ app.run('setCategoryByIndex(filterCategoryList().length-1)');assert.equal(app.run('filtered().length'),1);assert.equal(app.run('activeCategory'),'المفضلة ★');assert.match(favoriteCard(),/aria-pressed="true"/);
  app=createContext();assert.equal(app.run('favorites.length'),1);
  // Remote reads must preserve personal favorites; central saves keep legacy shared favorites.
  app.context.fetch=async()=>({ok:true,json:async()=>({success:true,data:{favorites:[]}})});
@@ -39,7 +44,7 @@ function createContext(){
  assert.equal(app.run("selectPrintEmployees({preset:'department'}).length"),0);
  assert.equal(app.run("selectPrintEmployees({preset:'full'}).length"),count);
  assert.equal(app.run("new Set(selectPrintEmployees({selectedCategories:['المكاتب الدولية','الموظفون','مديرو مكاتب الندوة']}).map(person=>person.id)).size===selectPrintEmployees({selectedCategories:['المكاتب الدولية','الموظفون','مديرو مكاتب الندوة']}).length"),true);
- assert.equal(app.run("directoryDepartment(employees.find(person=>person.name==='عبدربه حكمي'))"),'إدارة المكاتب والعلاقات الدولية');
+ assert.equal(app.run("directoryDepartment(employees.find(person=>person.name.startsWith('عبدربه ')))"),'إدارة المكاتب والعلاقات الدولية');
  assert.equal(app.run('directoryDepartment(employees.find(isOfficeEmployee))'),'المكاتب الدولية');
  assert.equal(app.run("printCategoryList().filter(category=>category==='المكاتب الدولية').length"),1);
  app.run('renderPrintChecks()');assert.match(app.get('printChecks').innerHTML,/value="المكاتب الدولية"/);
