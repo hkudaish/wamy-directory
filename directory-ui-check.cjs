@@ -16,7 +16,7 @@ function createContext(){
  const count=app.run('employees.length');
  app.run('renderHome()');const totalCard=()=>app.get('stats').innerHTML.match(/<button[^>]*class="stat stat-total[\s\S]*?<\/button>/)[0];const stats=totalCard();
  const favoriteCard=()=>app.get('stats').innerHTML.match(/<button[^>]*class="stat stat-favorite[\s\S]*?<\/button>/)[0];
- assert.match(totalCard(),/<span>الموظفون<\/span>/);assert.match(favoriteCard(),/<b>0<\/b>/);
+ assert.match(totalCard(),/<span>عرض الكل<\/span>/);assert.match(favoriteCard(),/<b>0<\/b>/);
  assert.doesNotMatch(fs.readFileSync('index.html','utf8'),/id="chips"|\.stats\{display:none\}/);
  const selectedCategory=app.run('visibleCategories()[0]');app.run('setCategoryByIndex(1)');assert.equal(app.run('activeCategory'),selectedCategory);assert.equal(app.run('filtered().every(person=>person.category===activeCategory)'),true);assert.ok(app.run('filtered().length')>0);
  assert.match(app.get('stats').innerHTML,/class="stat stat-category active"[^>]*aria-pressed="true"/);app.run('setCategoryByIndex(0)');assert.equal(app.run('filtered().length'),count);
